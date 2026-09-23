@@ -22,12 +22,9 @@ Recommended:
 3. Go to **Plugin → Plugin Manager → Install New Plugin**
 4. Choose `chatmol.py`
 5. Restart PyMOL if prompted
-6. Open **Plugin → ChatMol AI - Open Chat**
+6. Open **Plugin → ChatMol AI**
 
-The plugin also adds:
-
-- **ChatMol AI - Settings**
-- **ChatMol AI - About**
+PyMOL's Plugin menu contains only this single ChatMol entry. Settings and About are available inside the ChatMol panel.
 
 Manual loading remains supported:
 
