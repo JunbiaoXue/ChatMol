@@ -13,23 +13,26 @@ An LLM-powered agentic plugin for PyMOL that translates natural language into mo
 
 ### Installation
 
-The v2 script is now a standard PyMOL plugin. PyMOL supports single-file Python plugins that define `__init_plugin__`, and Plugin Manager can install `.py` files directly.
+**Recommended: install the ZIP plugin.**
 
-Recommended:
+1. Download `chatmol-ai-vX.Y.Z.zip` from a GitHub Release or the `chatmol-ai-pymol-plugin` Actions artifact.
+2. Open PyMOL.
+3. Go to **Plugin → Plugin Manager → Install New Plugin**.
+4. Select the ZIP.
+5. Open **Plugin → ChatMol AI**.
 
-1. Download `pymol_plugin/v2/chatmol.py`
-2. Open PyMOL
-3. Go to **Plugin → Plugin Manager → Install New Plugin**
-4. Choose `chatmol.py`
-5. Restart PyMOL if prompted
-6. Open **Plugin → ChatMol AI**
+The ZIP contains the multi-file `chatmol_ai/` package with a standard `__init_plugin__` entry point.
 
-PyMOL's Plugin menu contains only this single ChatMol entry. Settings and About are available inside the ChatMol panel.
-
-Manual loading remains supported:
+For a full repository clone, the legacy launcher remains available:
 
 ```python
-run /path/to/pymol_plugin/v2/chatmol.py
+run /path/to/ChatMol/pymol_plugin/v2/chatmol.py
+```
+
+To build the ZIP yourself:
+
+```bash
+python scripts/build_plugin_zip.py
 ```
 
 ### Supported Providers
@@ -54,7 +57,8 @@ Using the Qt settings dialog:
 2. Base URL: for example `https://api.example.com/v1`
 3. API Key: your gateway key
 4. Text Model: the exact model ID exposed by your gateway
-5. Vision Model: optional; use a multimodal model ID if you want `capture_viewport` visual QA
+5. Click **Refresh Models (/v1/models)** to load model IDs exposed by your NewAPI endpoint.
+6. Choose a Text Model and, optionally, a multimodal Vision Model for `capture_viewport` visual QA.
 
 Equivalent PyMOL commands:
 
@@ -100,23 +104,48 @@ chat fetch 3wzm, show enzyme-substrate interactions in chain A with publication 
 | `chatmol_config`       | Show current configuration                        |
 | `chatmol_settings`     | Open the Qt settings dialog                       |
 | `chatmol_gui`          | Open the Qt chat bar                              |
+| `chatmol_models`       | Fetch and print model IDs from the current `/models` endpoint |
+| `chatmol_undo`         | Restore the most recent AI-created PyMOL snapshot |
 
 ### Architecture
 
-The v2 plugin uses a simple agentic loop: call the LLM, execute tool calls, repeat until the LLM produces a final text response.
+The v2 implementation is now split into a multi-file package:
 
-**4 tools:**
+```text
+pymol_plugin/chatmol_ai/
+├── __init__.py
+├── core.py
+├── providers.py
+├── tools.py
+└── version.py
+```
 
-| Tool                 | Purpose                                                    |
-| -------------------- | ---------------------------------------------------------- |
-| `inspect_session`    | Get current PyMOL state (objects, chains, atoms)           |
-| `run_pymol_commands` | Execute arbitrary PyMOL commands (with safety blocklist)   |
-| `render`             | Export image (preview or publication quality)              |
-| `capture_viewport`   | Screenshot + vision model analysis for iterative visual QA |
+The agent prefers structured tools for common operations and keeps `run_pymol_commands` as a fallback.
 
-The LLM knows PyMOL — it uses `cmd.select`, `cmd.show`, `cmd.color`, `cmd.distance`, `preset.ligand_sites_hq`, etc. all through `run_pymol_commands`. A safety blocklist prevents destructive commands (`quit`, `reinitialize`, shell commands).
+Structured tools include:
 
-**Qt5 GUI:** When PyMOL has Qt available, a chat bar docks to the bottom of the main window with a settings dialog, execution trace panel, and animated thinking indicator.
+- `select_residues`
+- `color_selection`
+- `show_representation`
+- `measure_distance`
+- `align_structures`
+- `get_sequence`
+- `get_contacts`
+- `inspect_session`
+- `render`
+- `capture_viewport`
+
+A safety blocklist still protects the raw command fallback.
+
+### Execution safety and Undo
+
+The ChatMol panel provides three execution modes:
+
+- **Auto** — run approved PyMOL tools immediately.
+- **Confirm** — ask before each scene-mutating tool call.
+- **Dry Run** — show the planned tool call without changing PyMOL.
+
+Before mutating AI tool calls, ChatMol stores an in-memory PyMOL session snapshot. Use the **Undo** button or `chatmol_undo` to restore the latest snapshot.
 
 ### Configuration
 
@@ -127,6 +156,7 @@ Settings are persisted to `~/.PyMOL/chatmol_config.json`:
 - `base_urls` — optional per-provider Base URL overrides (required for `newapi`)
 - `text_model` — model for chat completions
 - `vision_model` — model for visual QA (capture_viewport)
+- `execution_mode` — `auto`, `confirm`, or `dry_run`
 - `temperature`, `max_tokens`, `max_iterations`, `max_tool_calls`
 
 ## v1 — Original Plugin
