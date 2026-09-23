@@ -29,6 +29,32 @@ v2 routes through OpenAI-compatible APIs. Configure via `set_provider`:
 | DeepSeek        | DeepSeek V3, DeepSeek R1              | `DEEPSEEK_API_KEY`   |
 | Kimi (Moonshot) | Kimi K2.5                             | `MOONSHOT_API_KEY`   |
 | GLM (Zhipu)     | GLM-5                                 | `GLM_API_KEY`        |
+| Custom / NewAPI  | Any compatible model ID               | `CHATMOL_CUSTOM_API_KEY` |
+
+### Custom / NewAPI / OpenAI-compatible endpoint
+
+Select the `newapi` provider when using NewAPI, LiteLLM, a self-hosted OpenAI-compatible gateway, or another compatible proxy. The Base URL can be either an API base such as `https://api.example.com/v1` or the full `.../chat/completions` endpoint.
+
+Using the Qt settings dialog:
+
+1. Provider: **Custom / NewAPI**
+2. Base URL: for example `https://api.example.com/v1`
+3. API Key: your gateway key
+4. Text Model: the exact model ID exposed by your gateway
+5. Vision Model: optional; use a multimodal model ID if you want `capture_viewport` visual QA
+
+Equivalent PyMOL commands:
+
+```pymol
+set_provider newapi
+set_base_url https://api.example.com/v1
+set_api_key sk-xxxx
+set_model your-text-model-id
+set_vision_model your-vision-model-id
+chat inspect the current structure and highlight the binding interface
+```
+
+The plugin accepts either a Base URL or the full chat-completions endpoint. Text and vision requests use the same configured endpoint.
 
 ### Quick Start
 
@@ -50,7 +76,8 @@ chat fetch 3wzm, show enzyme-substrate interactions in chain A with publication 
 | Command                | Description                                       |
 | ---------------------- | ------------------------------------------------- |
 | `chat <message>`       | Send a message to the agent                       |
-| `set_provider <name>`  | Switch provider (openrouter, deepseek, kimi, glm) |
+| `set_provider <name>`  | Switch provider (openrouter, deepseek, kimi, glm, newapi) |
+| `set_base_url <url>`    | Set OpenAI-compatible Base URL for current provider |
 | `set_api_key <key>`    | Set API key for the current provider              |
 | `set_model <model>`    | Set the text model                                |
 | `set_vision_model <m>` | Set the vision model for visual QA                |
@@ -84,6 +111,7 @@ Settings are persisted to `~/.PyMOL/chatmol_config.json`:
 
 - `provider` — API provider name
 - `api_keys` — per-provider API keys
+- `base_urls` — optional per-provider Base URL overrides (required for `newapi`)
 - `text_model` — model for chat completions
 - `vision_model` — model for visual QA (capture_viewport)
 - `temperature`, `max_tokens`, `max_iterations`, `max_tool_calls`
