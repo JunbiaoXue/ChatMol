@@ -6,7 +6,6 @@ import json
 import os
 import re
 import tempfile
-import time
 
 from pymol import cmd
 
@@ -55,10 +54,9 @@ TOOL_DEFINITIONS = [
         "function": {
             "name": "run_pymol_commands",
             "description": (
-                "Execute newline-separated PyMOL commands. Use this for all "
-                "PyMOL operations: selections, styling, coloring, distances, "
-                "presets, etc. Commands are run sequentially with safety "
-                "guardrails (destructive/shell commands are blocked)."
+                "Execute newline-separated PyMOL commands for operations not "
+                "covered by structured tools. Commands run sequentially with "
+                "safety guardrails (destructive/shell commands are blocked)."
             ),
             "parameters": {
                 "type": "object",
@@ -101,7 +99,7 @@ TOOL_DEFINITIONS = [
                         "type": "boolean",
                         "description": "If omitted: preview=False, final=True.",
                     },
-                    "transparent_bg": {"type": "boolean", "default": True},
+                    "transparent_bg": {"type": "boolean", "default": False},
                 },
                 "required": ["path"],
             },
@@ -113,8 +111,9 @@ TOOL_DEFINITIONS = [
             "name": "capture_viewport",
             "description": (
                 "Capture current viewport and run vision model analysis. "
-                "Use this to visually verify your work (e.g., check that "
-                "styling looks correct before finalizing)."
+                "Critically check subject size, clipping, contrast, clutter, "
+                "and whether the figure communicates the requested point. "
+                "A successful call alone does not mean the figure is good."
             ),
             "parameters": {
                 "type": "object",
@@ -175,6 +174,45 @@ TOOL_DEFINITIONS += [
                     "representation": {"type": "string"},
                 },
                 "required": ["selection", "representation"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "compose_figure",
+            "description": (
+                "Frame a clean molecular figure after styling. Zoom to the "
+                "primary molecular focus, optionally hide auxiliary marker "
+                "objects, and use an opaque white background with crisp "
+                "cartoons. Keep membrane marker clouds out of the focal frame. "
+                "Call before capture_viewport and final render."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "focus_selection": {
+                        "type": "string",
+                        "description": (
+                            "Atoms that should dominate the figure, typically "
+                            "the protein complex or a binding interface; do "
+                            "not include helper membrane markers."
+                        ),
+                    },
+                    "hide_selection": {
+                        "type": "string",
+                        "description": (
+                            "Optional visual clutter to hide, such as a "
+                            "membrane marker object. This does not delete atoms."
+                        ),
+                    },
+                    "buffer": {
+                        "type": "number",
+                        "default": 3.0,
+                        "description": "Space around the focus in angstroms.",
+                    },
+                },
+                "required": ["focus_selection"],
             },
         },
     },
@@ -246,6 +284,7 @@ MUTATING_TOOLS = {
     "select_residues",
     "color_selection",
     "show_representation",
+    "compose_figure",
     "measure_distance",
     "align_structures",
 }
@@ -311,6 +350,46 @@ def _tool_show_representation(selection, representation):
     return {"ok": True, "tool": "show_representation", "selection": selection, "representation": representation}
 
 
+def _tool_compose_figure(focus_selection, hide_selection="", buffer=3.0):
+    focus_atoms = cmd.count_atoms(focus_selection)
+    if not focus_atoms:
+        return {
+            "ok": False,
+            "tool": "compose_figure",
+            "error": "focus_selection contains no atoms; the scene was not changed.",
+        }
+    buffer = max(0.0, min(15.0, float(buffer)))
+    if hide_selection and cmd.count_atoms(
+        f"({focus_selection}) and ({hide_selection})"
+    ) == focus_atoms:
+        return {
+            "ok": False,
+            "tool": "compose_figure",
+            "error": "hide_selection contains the entire focus; the scene was not changed.",
+        }
+    hidden_atoms = cmd.count_atoms(hide_selection) if hide_selection else 0
+    if hide_selection:
+        cmd.hide("everything", hide_selection)
+    cmd.bg_color("white")
+    cmd.set("ray_opaque_background", 1)
+    cmd.set("orthoscopic", 1)
+    cmd.set("depth_cue", 0)
+    cmd.set("antialias", 2)
+    cmd.set("cartoon_fancy_helices", 1, focus_selection)
+    cmd.set("cartoon_smooth_loops", 1, focus_selection)
+    cmd.set("cartoon_transparency", 0, focus_selection)
+    cmd.zoom(focus_selection, buffer=buffer, complete=1)
+    return {
+        "ok": True,
+        "tool": "compose_figure",
+        "focus_selection": focus_selection,
+        "focus_atoms": focus_atoms,
+        "hide_selection": hide_selection,
+        "hidden_atoms": hidden_atoms,
+        "buffer": buffer,
+    }
+
+
 def _tool_measure_distance(selection1, selection2, name="chatmol_distance"):
     value = cmd.distance(name, selection1, selection2)
     return {"ok": True, "tool": "measure_distance", "name": name, "distance": value}
@@ -357,6 +436,7 @@ def execute_tool(tool_name, arguments, client=None, vision_model=None):
         "select_residues": _tool_select_residues,
         "color_selection": _tool_color_selection,
         "show_representation": _tool_show_representation,
+        "compose_figure": _tool_compose_figure,
         "measure_distance": _tool_measure_distance,
         "align_structures": _tool_align_structures,
         "get_sequence": _tool_get_sequence,
@@ -391,14 +471,24 @@ def _tool_inspect_session(include_view=False):
     selections = cmd.get_names("selections")
     details = []
     for obj in objects:
+        atom_count = cmd.count_atoms(obj)
+        hetatm_atoms = cmd.count_atoms(f"({obj}) and hetatm")
+        hetero_residues = {}
+        if 0 < hetatm_atoms <= 5000:
+            for atom in cmd.get_model(f"({obj}) and hetatm").atom:
+                hetero_residues[atom.resn] = hetero_residues.get(atom.resn, 0) + 1
         details.append(
             {
                 "name": obj,
-                "atoms": cmd.count_atoms(obj),
+                "atoms": atom_count,
                 "polymer_atoms": cmd.count_atoms(f"({obj}) and polymer"),
-                "hetatm_atoms": cmd.count_atoms(f"({obj}) and hetatm"),
+                "hetatm_atoms": hetatm_atoms,
+                "hetatm_resname_atom_counts": dict(
+                    sorted(hetero_residues.items(), key=lambda item: -item[1])[:10]
+                ),
                 "chains": cmd.get_chains(obj),
                 "states": cmd.count_states(obj),
+                "extent": cmd.get_extent(obj) if atom_count else None,
             }
         )
     out = {
@@ -457,7 +547,7 @@ def _tool_render(
     height=None,
     dpi=None,
     ray=None,
-    transparent_bg=True,
+    transparent_bg=False,
     purpose="preview",
 ):
     out_path = os.path.abspath(os.path.expanduser(path))
@@ -492,7 +582,7 @@ def _tool_render(
         dpi = min(dpi, 220)
 
     ray_flag = 1 if _to_bool(ray, default=default_ray) else 0
-    transparent = _to_bool(transparent_bg, default=True)
+    transparent = _to_bool(transparent_bg, default=False)
     cmd.set("ray_opaque_background", 0 if transparent else 1)
     cmd.png(out_path, width=width, height=height, dpi=dpi, ray=ray_flag, quiet=1)
 
@@ -521,8 +611,16 @@ def _tool_capture_viewport(analysis_prompt=None, client=None, vision_model=None)
     tmp.close()
 
     try:
-        cmd.png(tmp_path, width=800, height=600, ray=0, quiet=1)
-        time.sleep(0.5)
+        viewport_width, viewport_height = cmd.get_viewport()
+        if viewport_width <= 0 or viewport_height <= 0:
+            viewport_width, viewport_height = 800, 600
+        cmd.png(
+            tmp_path,
+            width=viewport_width,
+            height=viewport_height,
+            ray=0,
+            quiet=1,
+        )
         with open(tmp_path, "rb") as f:
             img_data = base64.b64encode(f.read()).decode("ascii")
     except Exception as exc:

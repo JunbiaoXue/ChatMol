@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.2
+
+### Improved
+- Add a structured `compose_figure` step that frames the selected molecular focus, hides specified marker clutter, and applies legible figure settings.
+- Capture the actual PyMOL viewport dimensions instead of forcing an 800 × 600 preview.
+- Make the figure workflow check framing and contrast before final rendering; distinguish membrane marker points from a molecular bilayer.
+- Default PNG exports to an opaque background unless transparency is requested.
+
 ## 0.3.1
 
 ### Fixed

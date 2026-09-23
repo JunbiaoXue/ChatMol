@@ -127,6 +127,7 @@ Structured tools include:
 - `select_residues`
 - `color_selection`
 - `show_representation`
+- `compose_figure`
 - `measure_distance`
 - `align_structures`
 - `get_sequence`
@@ -134,6 +135,12 @@ Structured tools include:
 - `inspect_session`
 - `render`
 - `capture_viewport`
+
+### Making clearer figures
+
+Ask ChatMol for one visual question per image, such as a whole-complex overview or a binding-interface close-up. It can now use `compose_figure` to frame the molecular focus and hide specified auxiliary markers before checking the viewport and exporting a ray-traced PNG. For example, a protein complex can be framed without including a separate membrane marker object in the zoom selection.
+
+Membrane pseudoatoms or leaflet markers are spatial references, not a complete lipid bilayer. For a clean structural figure, hide their scattered sphere representation. If membrane context is needed, show it separately as a clearly identified schematic based on the supplied markers. A rendered structure does not establish binding strength or experimental membrane accessibility.
 
 A safety blocklist still protects the raw command fallback.
 
