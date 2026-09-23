@@ -43,12 +43,38 @@ jobs:
           name: chatmol-ai-pymol-plugin
           path: dist/chatmol-ai-v*.zip
 
-      - name: Publish tagged release asset
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Resolve plugin version
+        if: github.event_name != 'pull_request'
+        id: version
+        shell: bash
+        run: |
+          VERSION="$(python - <<'PY'
+          import re
+          from pathlib import Path
+          text = Path("pymol_plugin/chatmol_ai/version.py").read_text()
+          m = re.search(r'__version__\\s*=\\s*["\\']([^"\\']+)["\\']', text)
+          if not m:
+              raise SystemExit("Could not read ChatMol version")
+          print(m.group(1))
+          PY
+          )"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update GitHub Release
+        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        shell: bash
         run: |
-          gh release create "${GITHUB_REF_NAME}" dist/chatmol-ai-v*.zip \
-            --repo "${GITHUB_REPOSITORY}" \
-            --generate-notes \
-            --title "ChatMol AI ${GITHUB_REF_NAME}"
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --generate-notes \
+              --title "ChatMol AI $TAG"
+          fi
+          gh release upload "$TAG" dist/chatmol-ai-v*.zip \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
