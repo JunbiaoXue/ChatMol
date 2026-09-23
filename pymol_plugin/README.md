@@ -13,7 +13,23 @@ An LLM-powered agentic plugin for PyMOL that translates natural language into mo
 
 ### Installation
 
-In PyMOL's command line:
+The v2 script is now a standard PyMOL plugin. PyMOL supports single-file Python plugins that define `__init_plugin__`, and Plugin Manager can install `.py` files directly.
+
+Recommended:
+
+1. Download `pymol_plugin/v2/chatmol.py`
+2. Open PyMOL
+3. Go to **Plugin → Plugin Manager → Install New Plugin**
+4. Choose `chatmol.py`
+5. Restart PyMOL if prompted
+6. Open **Plugin → ChatMol AI - Open Chat**
+
+The plugin also adds:
+
+- **ChatMol AI - Settings**
+- **ChatMol AI - About**
+
+Manual loading remains supported:
 
 ```python
 run /path/to/pymol_plugin/v2/chatmol.py
