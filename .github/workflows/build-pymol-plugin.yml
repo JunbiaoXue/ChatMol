@@ -9,6 +9,13 @@ on:
       - "pymol_plugin/v2/chatmol.py"
       - "scripts/build_plugin_zip.py"
       - ".github/workflows/build-pymol-plugin.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "pymol_plugin/chatmol_ai/**"
+      - "pymol_plugin/v2/chatmol.py"
+      - "scripts/build_plugin_zip.py"
+      - ".github/workflows/build-pymol-plugin.yml"
   workflow_dispatch:
 
 permissions:
