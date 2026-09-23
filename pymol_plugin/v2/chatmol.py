@@ -1447,6 +1447,10 @@ if _HAS_QT:
             settings_btn.setFixedWidth(70)
             settings_btn.clicked.connect(self._open_settings)
             top_bar.addWidget(settings_btn)
+            about_btn = QPushButton("About")
+            about_btn.setFixedWidth(55)
+            about_btn.clicked.connect(chatmol_about)
+            top_bar.addWidget(about_btn)
             clear_btn = QPushButton("Clear")
             clear_btn.setFixedWidth(50)
             clear_btn.clicked.connect(self._clear_chat)
@@ -1670,12 +1674,10 @@ def __init_plugin__(app=None):
     """Standard PyMOL plugin entry point used by Plugin Manager."""
     try:
         from pymol.plugins import addmenuitemqt
-        addmenuitemqt("ChatMol AI - Open Chat", chatmol_gui)
-        addmenuitemqt("ChatMol AI - Settings", chatmol_settings)
-        addmenuitemqt("ChatMol AI - About", chatmol_about)
+        addmenuitemqt("ChatMol AI", chatmol_gui)
         print("ChatMol AI registered in the PyMOL Plugin menu.")
     except Exception as exc:
-        print(f"ChatMol AI: failed to register Plugin menu items: {exc}")
+        print(f"ChatMol AI: failed to register Plugin menu item: {exc}")
 
 
 cmd.extend("chatmol_settings", chatmol_settings)
