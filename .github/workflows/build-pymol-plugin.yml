@@ -49,13 +49,17 @@ jobs:
         shell: bash
         run: |
           VERSION="$(python - <<'PY'
-          import re
+          import ast
           from pathlib import Path
-          text = Path("pymol_plugin/chatmol_ai/version.py").read_text()
-          m = re.search(r'__version__\\s*=\\s*["\\']([^"\\']+)["\\']', text)
-          if not m:
-              raise SystemExit("Could not read ChatMol version")
-          print(m.group(1))
+
+          tree = ast.parse(Path("pymol_plugin/chatmol_ai/version.py").read_text())
+          for node in tree.body:
+              if isinstance(node, ast.Assign):
+                  for target in node.targets:
+                      if isinstance(target, ast.Name) and target.id == "__version__":
+                          print(ast.literal_eval(node.value))
+                          raise SystemExit(0)
+          raise SystemExit("Could not read ChatMol version")
           PY
           )"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
