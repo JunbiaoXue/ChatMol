@@ -1,11 +1,16 @@
 """
-ChatMol — Agentic PyMOL Plugin with OpenRouter and Qt5 GUI.
+ChatMol — Agentic PyMOL Plugin with OpenRouter/NewAPI and Qt GUI.
 
-Load in PyMOL:
+Recommended installation:
+    PyMOL -> Plugin -> Plugin Manager -> Install New Plugin
+    Select this chatmol.py file.
+
+After installation, use:
+    Plugin -> ChatMol AI - Open Chat
+    Plugin -> ChatMol AI - Settings
+
+Legacy/manual loading is still supported:
     run /path/to/pymol_plugin/v2/chatmol.py
-
-Or from remote:
-    load https://raw.githubusercontent.com/ChatMol/ChatMol/main/pymol_plugin/v2/chatmol.py
 
 Demo prompt:
 ZH: 3wzm的A链是玉米赤霉烯酮水解酶和底物的共晶复合物，作图展示酶底物(ZER)相互作用，风格参考顶级结构生物学期刊的风格，画面干净、清晰。
@@ -1638,12 +1643,44 @@ def chatmol_settings():
 
 
 def chatmol_gui():
-    """Manually open the ChatMol chat bar (requires Qt)."""
+    """Open the ChatMol chat bar (requires Qt)."""
     _init_gui()
+
+
+def chatmol_about():
+    """Show basic plugin information."""
+    message = (
+        "ChatMol AI\n\n"
+        "Agentic PyMOL assistant with OpenAI-compatible providers, "
+        "including custom NewAPI endpoints.\n\n"
+        "Commands: chat, set_provider, set_base_url, set_api_key, "
+        "set_model, set_vision_model, chatmol_config"
+    )
+    if _HAS_QT:
+        try:
+            from pymol.Qt.QtWidgets import QMessageBox
+            QMessageBox.information(None, "ChatMol AI", message)
+            return
+        except Exception:
+            pass
+    print(message)
+
+
+def __init_plugin__(app=None):
+    """Standard PyMOL plugin entry point used by Plugin Manager."""
+    try:
+        from pymol.plugins import addmenuitemqt
+        addmenuitemqt("ChatMol AI - Open Chat", chatmol_gui)
+        addmenuitemqt("ChatMol AI - Settings", chatmol_settings)
+        addmenuitemqt("ChatMol AI - About", chatmol_about)
+        print("ChatMol AI registered in the PyMOL Plugin menu.")
+    except Exception as exc:
+        print(f"ChatMol AI: failed to register Plugin menu items: {exc}")
 
 
 cmd.extend("chatmol_settings", chatmol_settings)
 cmd.extend("chatmol_gui", chatmol_gui)
+cmd.extend("chatmol_about", chatmol_about)
 
 
 _chatbar = None
@@ -1682,14 +1719,8 @@ def _init_gui():
     print("ChatMol chat bar loaded.")
 
 
-if _HAS_QT:
-    try:
-        QTimer.singleShot(1500, _init_gui)
-    except Exception:
-        pass
-
 print(
     "ChatMol plugin loaded. Commands: chat, set_provider, set_base_url, set_api_key, "
     "set_model, set_vision_model, reset_conversation, "
-    "chatmol_config, chatmol_settings, chatmol_gui"
+    "chatmol_config, chatmol_settings, chatmol_gui, chatmol_about"
 )
