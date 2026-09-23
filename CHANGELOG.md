@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1
+
+### Fixed
+- Let Settings fields grow with the window, with readable Text Model and Vision Model selectors.
+- Arrange ChatMol's dock controls in two columns so button labels fit in narrow panels.
+- Give the message input and Send button their own row, and wrap the model status below them.
+
 ## 0.3.0
 
 ### Added
