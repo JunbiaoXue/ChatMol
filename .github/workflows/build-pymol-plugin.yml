@@ -1,0 +1,47 @@
+name: Build PyMOL Plugin
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths:
+      - "pymol_plugin/chatmol_ai/**"
+      - "pymol_plugin/v2/chatmol.py"
+      - "scripts/build_plugin_zip.py"
+      - ".github/workflows/build-pymol-plugin.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Syntax check
+        run: python -m compileall -q pymol_plugin/chatmol_ai
+
+      - name: Build installable ZIP
+        run: python scripts/build_plugin_zip.py
+
+      - name: Upload plugin artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chatmol-ai-pymol-plugin
+          path: dist/chatmol-ai-v*.zip
+
+      - name: Publish tagged release asset
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/chatmol-ai-v*.zip \
+            --repo "${GITHUB_REPOSITORY}" \
+            --generate-notes \
+            --title "ChatMol AI ${GITHUB_REF_NAME}"
