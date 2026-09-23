@@ -92,6 +92,14 @@ PROVIDERS = {
         "vision_models": [],
         "extra_headers": {},
     },
+    "newapi": {
+        "label": "Custom / NewAPI",
+        "base_url": "",
+        "env_var": "CHATMOL_CUSTOM_API_KEY",
+        "models": [],
+        "vision_models": [],
+        "extra_headers": {},
+    },
 }
 
 
@@ -103,12 +111,23 @@ class LLMFatalError(RuntimeError):
     """Non-retriable API errors."""
 
 
+def _normalize_chat_completions_url(base_url):
+    """Accept an API base URL (e.g. .../v1) or a full chat-completions endpoint."""
+    url = (base_url or "").strip().rstrip("/")
+    if not url:
+        return ""
+    if url.endswith("/chat/completions"):
+        return url
+    return f"{url}/chat/completions"
+
+
 class LLMClient:
     """Thin HTTP client for OpenAI-compatible chat-completion APIs."""
 
-    def __init__(self, provider_name, api_key):
+    def __init__(self, provider_name, api_key, base_url_override=""):
         prov = PROVIDERS.get(provider_name, PROVIDERS["openrouter"])
-        self.base_url = prov["base_url"]
+        raw_base_url = base_url_override or prov["base_url"]
+        self.base_url = _normalize_chat_completions_url(raw_base_url)
         self.extra_headers = prov.get("extra_headers", {})
         self.api_key = api_key
 
@@ -596,6 +615,7 @@ class ChatMolAgent:
     DEFAULT_CONFIG = {
         "provider": "openrouter",
         "api_keys": {},
+        "base_urls": {},
         "text_model": "google/gemini-3-flash-preview",
         "vision_model": "google/gemini-3-flash-preview",
         "temperature": 0.01,
@@ -618,9 +638,12 @@ class ChatMolAgent:
                 cfg = json.load(f)
             merged = dict(self.DEFAULT_CONFIG)
             merged["api_keys"] = dict(self.DEFAULT_CONFIG["api_keys"])
+            merged["base_urls"] = dict(self.DEFAULT_CONFIG["base_urls"])
             merged.update(cfg)
             if not isinstance(merged.get("api_keys"), dict):
                 merged["api_keys"] = {}
+            if not isinstance(merged.get("base_urls"), dict):
+                merged["base_urls"] = {}
             # Migrate old single "api_key" field
             old_key = merged.pop("api_key", "")
             if old_key and isinstance(old_key, str):
@@ -651,10 +674,16 @@ class ChatMolAgent:
             prov_name, ""
         )
 
+    def _resolve_base_url(self):
+        prov_name = self.config.get("provider", "openrouter")
+        prov = PROVIDERS.get(prov_name, PROVIDERS["openrouter"])
+        stored = self.config.get("base_urls", {}).get(prov_name, "")
+        return stored.strip() or prov.get("base_url", "")
+
     def _reinit_client(self):
         prov_name = self.config.get("provider", "openrouter")
         api_key = self._resolve_api_key()
-        self.client = LLMClient(prov_name, api_key)
+        self.client = LLMClient(prov_name, api_key, self._resolve_base_url())
 
     # -- PyMOL-registered commands ------------------------------------------
 
@@ -668,6 +697,12 @@ class ChatMolAgent:
             prov = self.config.get("provider", "openrouter")
             env = PROVIDERS.get(prov, {}).get("env_var", "")
             print(f"No API key set. Use: set_api_key <key>  (or set env var {env})")
+            return
+        if not self._resolve_base_url():
+            print("No Base URL set. Use: set_base_url <url>  (for example https://host/v1)")
+            return
+        if not self.config.get("text_model", "").strip():
+            print("No text model set. Use: set_model <model-id>")
             return
         try:
             response = self._run_agent_loop(message)
@@ -707,6 +742,23 @@ class ChatMolAgent:
         label = PROVIDERS.get(prov_name, {}).get("label", prov_name)
         print(f"{label} API key saved.")
 
+    def set_base_url(self, base_url=""):
+        """PyMOL command: set_base_url <url>"""
+        prov_name = self.config.get("provider", "openrouter")
+        base_url = base_url.strip()
+        if not base_url:
+            current = self._resolve_base_url() or "(not set)"
+            print(f"Current Base URL: {current}")
+            print("Usage: set_base_url https://your-newapi.example/v1")
+            return
+        if not isinstance(self.config.get("base_urls"), dict):
+            self.config["base_urls"] = {}
+        self.config["base_urls"][prov_name] = base_url.rstrip("/")
+        self._save_config()
+        self._reinit_client()
+        print(f"Base URL for {prov_name} set to: {self.config['base_urls'][prov_name]}")
+        print(f"Chat completions endpoint: {self.client.base_url}")
+
     def set_provider(self, provider_name=""):
         """PyMOL command: set_provider <name>"""
         provider_name = provider_name.strip().lower()
@@ -721,7 +773,7 @@ class ChatMolAgent:
             self.config["text_model"] = prov["models"][0][0]
         if prov["vision_models"]:
             self.config["vision_model"] = prov["vision_models"][0][0]
-        else:
+        elif provider_name != "newapi":
             self.config["vision_model"] = ""
         self._save_config()
         self._reinit_client()
@@ -792,6 +844,8 @@ class ChatMolAgent:
         has_env = bool(os.getenv(prov.get("env_var", ""), ""))
         print("ChatMol configuration:")
         print(f"  provider: {prov.get('label', prov_name)} ({prov_name})")
+        print(f"  base_url: {self._resolve_base_url() or '(not set)'}")
+        print(f"  endpoint: {self.client.base_url or '(not set)'}")
         print(f"  api_key: {masked} ({'env var' if has_env else 'config file'})")
         print(f"  text_model: {self.config.get('text_model', '')}")
         print(f"  vision_model: {self.config.get('vision_model', '') or '(none)'}")
@@ -1192,6 +1246,20 @@ if _HAS_QT:
             self.provider_combo.currentIndexChanged.connect(self._on_provider_changed)
             layout.addRow("Provider:", self.provider_combo)
 
+            # Base URL (supports API base such as .../v1 or the full endpoint)
+            self.base_url_edit = QLineEdit()
+            self.base_url_edit.setPlaceholderText("https://your-newapi.example/v1")
+            self.base_url_hint = QLabel(
+                "Use an OpenAI-compatible API base URL (.../v1) or full .../chat/completions endpoint"
+            )
+            self.base_url_hint.setWordWrap(True)
+            self.base_url_hint.setStyleSheet("color: grey; font-size: 10px;")
+            base_layout = QVBoxLayout()
+            base_layout.setSpacing(2)
+            base_layout.addWidget(self.base_url_edit)
+            base_layout.addWidget(self.base_url_hint)
+            layout.addRow("Base URL:", base_layout)
+
             # API key
             self.api_key_edit = QLineEdit()
             self.api_key_edit.setEchoMode(QLineEdit.Password)
@@ -1263,12 +1331,17 @@ if _HAS_QT:
 
         def _on_provider_changed(self, _index):
             prov_key = self.provider_combo.currentData()
+            prov = PROVIDERS.get(prov_key, PROVIDERS["openrouter"])
             stored_key = self.agent.config.get("api_keys", {}).get(prov_key, "")
             self.api_key_edit.setText(stored_key)
+            stored_base = self.agent.config.get("base_urls", {}).get(prov_key, "")
+            self.base_url_edit.setText(stored_base or prov.get("base_url", ""))
             self._populate_models(prov_key)
 
         def _populate_models(self, prov_key):
             prov = PROVIDERS.get(prov_key, PROVIDERS["openrouter"])
+            stored_base = self.agent.config.get("base_urls", {}).get(prov_key, "")
+            self.base_url_edit.setText(stored_base or prov.get("base_url", ""))
 
             env_var = prov.get("env_var", "")
             has_env = bool(os.getenv(env_var, ""))
@@ -1313,6 +1386,15 @@ if _HAS_QT:
             if not isinstance(self.agent.config.get("api_keys"), dict):
                 self.agent.config["api_keys"] = {}
             self.agent.config["api_keys"][prov_key] = self.api_key_edit.text().strip()
+
+            if not isinstance(self.agent.config.get("base_urls"), dict):
+                self.agent.config["base_urls"] = {}
+            entered_base = self.base_url_edit.text().strip().rstrip("/")
+            default_base = PROVIDERS.get(prov_key, {}).get("base_url", "").rstrip("/")
+            if entered_base and (prov_key == "newapi" or entered_base != default_base):
+                self.agent.config["base_urls"][prov_key] = entered_base
+            else:
+                self.agent.config["base_urls"].pop(prov_key, None)
 
             text_idx = self.text_model_combo.currentIndex()
             text_data = self.text_model_combo.itemData(text_idx)
@@ -1529,6 +1611,7 @@ _agent = ChatMolAgent()
 
 cmd.extend("chat", _agent.chat)
 cmd.extend("set_provider", _agent.set_provider)
+cmd.extend("set_base_url", _agent.set_base_url)
 cmd.extend("set_api_key", _agent.set_api_key)
 cmd.extend("set_model", _agent.set_model)
 cmd.extend("set_vision_model", _agent.set_vision_model)
@@ -1543,7 +1626,7 @@ def chatmol_settings():
     if not _HAS_QT:
         print(
             "Qt not available. Configure via commands: "
-            "set_api_key, set_model, set_vision_model"
+            "set_provider, set_base_url, set_api_key, set_model, set_vision_model"
         )
         return
     app = QApplication.instance()
@@ -1606,7 +1689,7 @@ if _HAS_QT:
         pass
 
 print(
-    "ChatMol plugin loaded. Commands: chat, set_provider, set_api_key, "
+    "ChatMol plugin loaded. Commands: chat, set_provider, set_base_url, set_api_key, "
     "set_model, set_vision_model, reset_conversation, "
     "chatmol_config, chatmol_settings, chatmol_gui"
 )
