@@ -551,6 +551,7 @@ try:
     QWidget = QtWidgets.QWidget
     QVBoxLayout = QtWidgets.QVBoxLayout
     QHBoxLayout = QtWidgets.QHBoxLayout
+    QGridLayout = QtWidgets.QGridLayout
     QTextEdit = QtWidgets.QTextEdit
     QLineEdit = QtWidgets.QLineEdit
     QPushButton = QtWidgets.QPushButton
@@ -561,6 +562,7 @@ try:
     QSpinBox = QtWidgets.QSpinBox
     QComboBox = QtWidgets.QComboBox
     QApplication = QtWidgets.QApplication
+    QSizePolicy = QtWidgets.QSizePolicy
 
     Qt = QtCore.Qt
     QThread = QtCore.QThread
@@ -718,9 +720,11 @@ if _HAS_QT:
 
         def _build_ui(self):
             layout = QFormLayout(self)
+            layout.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
 
             # Provider selector
             self.provider_combo = QComboBox()
+            self.provider_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             for key, prov in PROVIDERS.items():
                 self.provider_combo.addItem(prov["label"], key)
             cur_prov = self.agent.config.get("provider", "openrouter")
@@ -732,6 +736,7 @@ if _HAS_QT:
 
             # Base URL (supports API base such as .../v1 or the full endpoint)
             self.base_url_edit = QLineEdit()
+            self.base_url_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             self.base_url_edit.setPlaceholderText("https://your-newapi.example/v1")
             self.base_url_hint = QLabel(
                 "Use an OpenAI-compatible API base URL (.../v1) or full .../chat/completions endpoint"
@@ -746,6 +751,7 @@ if _HAS_QT:
 
             # API key
             self.api_key_edit = QLineEdit()
+            self.api_key_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             self.api_key_edit.setEchoMode(QLineEdit.Password)
             self.api_key_edit.setText(
                 self.agent.config.get("api_keys", {}).get(cur_prov, "")
@@ -761,14 +767,25 @@ if _HAS_QT:
             # Text model
             self.text_model_combo = QComboBox()
             self.text_model_combo.setEditable(True)
+            self.text_model_combo.setMinimumWidth(260)
+            self.text_model_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            self.text_model_combo.currentTextChanged.connect(
+                self.text_model_combo.setToolTip
+            )
             layout.addRow("Text Model:", self.text_model_combo)
 
             # Vision model
             self.vision_model_combo = QComboBox()
             self.vision_model_combo.setEditable(True)
+            self.vision_model_combo.setMinimumWidth(260)
+            self.vision_model_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            self.vision_model_combo.currentTextChanged.connect(
+                self.vision_model_combo.setToolTip
+            )
             layout.addRow("Vision Model:", self.vision_model_combo)
 
             self.refresh_models_btn = QPushButton("Refresh Models (/v1/models)")
+            self.refresh_models_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             self.refresh_models_btn.clicked.connect(self._refresh_models)
             layout.addRow("Available Models:", self.refresh_models_btn)
 
@@ -978,14 +995,17 @@ if _HAS_QT:
 
         def _build_ui(self):
             container = QWidget()
+            container.setMinimumWidth(280)
             vbox = QVBoxLayout(container)
             vbox.setContentsMargins(4, 4, 4, 4)
             vbox.setSpacing(4)
 
             # Top bar
-            top_bar = QHBoxLayout()
-            top_bar.addWidget(QLabel("<b>ChatMol</b>"))
-            top_bar.addStretch()
+            top_bar = QVBoxLayout()
+            top_bar.setSpacing(4)
+            heading = QHBoxLayout()
+            heading.addWidget(QLabel("<b>ChatMol</b>"))
+            heading.addStretch()
             self.mode_combo = QComboBox()
             self.mode_combo.addItem("Auto", "auto")
             self.mode_combo.addItem("Confirm", "confirm")
@@ -996,25 +1016,30 @@ if _HAS_QT:
                 self.mode_combo.setCurrentIndex(mode_idx)
             self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
             self.mode_combo.setToolTip("AI execution mode")
-            top_bar.addWidget(self.mode_combo)
+            heading.addWidget(self.mode_combo)
+            top_bar.addLayout(heading)
 
+            actions = QGridLayout()
+            actions.setColumnStretch(0, 1)
+            actions.setColumnStretch(1, 1)
             undo_btn = QPushButton("Undo")
-            undo_btn.setFixedWidth(50)
+            undo_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             undo_btn.clicked.connect(self._undo_last_action)
-            top_bar.addWidget(undo_btn)
+            actions.addWidget(undo_btn, 0, 0)
 
             settings_btn = QPushButton("Settings")
-            settings_btn.setFixedWidth(70)
+            settings_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             settings_btn.clicked.connect(self._open_settings)
-            top_bar.addWidget(settings_btn)
+            actions.addWidget(settings_btn, 0, 1)
             about_btn = QPushButton("About")
-            about_btn.setFixedWidth(55)
+            about_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             about_btn.clicked.connect(chatmol_about)
-            top_bar.addWidget(about_btn)
+            actions.addWidget(about_btn, 1, 0)
             clear_btn = QPushButton("Clear")
-            clear_btn.setFixedWidth(50)
+            clear_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             clear_btn.clicked.connect(self._clear_chat)
-            top_bar.addWidget(clear_btn)
+            actions.addWidget(clear_btn, 1, 1)
+            top_bar.addLayout(actions)
             vbox.addLayout(top_bar)
 
             # Execution trace panel
@@ -1042,16 +1067,19 @@ if _HAS_QT:
             self.input_edit = QLineEdit()
             self.input_edit.setPlaceholderText("Type a message...")
             self.input_edit.returnPressed.connect(self._on_send)
-            input_bar.addWidget(self.input_edit)
+            input_bar.addWidget(self.input_edit, 1)
             self.send_btn = QPushButton("Send")
-            self.send_btn.setFixedWidth(50)
             self.send_btn.clicked.connect(self._on_send)
             input_bar.addWidget(self.send_btn)
+            vbox.addLayout(input_bar)
+
             self.model_label = QLabel()
             self.model_label.setStyleSheet("color: grey; font-size: 10px;")
+            self.model_label.setWordWrap(True)
+            self.model_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.model_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
             self._update_model_label()
-            input_bar.addWidget(self.model_label)
-            vbox.addLayout(input_bar)
+            vbox.addWidget(self.model_label)
 
             self.setWidget(container)
 
@@ -1060,7 +1088,9 @@ if _HAS_QT:
             prov_label = PROVIDERS.get(prov_name, {}).get("label", prov_name)
             model = self.agent.config.get("text_model", "")
             short = model.split("/")[-1] if "/" in model else model
-            self.model_label.setText(f"{short} ({prov_label})")
+            status = f"{short} ({prov_label})"
+            self.model_label.setText(status)
+            self.model_label.setToolTip(f"{model} ({prov_label})")
 
         def _on_mode_changed(self, _index):
             mode = self.mode_combo.currentData() or "auto"
