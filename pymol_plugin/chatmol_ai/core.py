@@ -38,9 +38,7 @@ If a tool result says dry_run, confirmation_required, or denied, do not assume t
 
 Workflow:
 1. For non-trivial requests, start with `inspect_session` to understand the current state.
-2. Use `run_pymol_commands` for all PyMOL operations. You know PyMOL well — use \
-cmd.select, cmd.show, cmd.hide, cmd.color, cmd.set, cmd.distance, cmd.zoom, \
-cmd.orient, util.color_chains, util.cnc, preset.ligand_sites_hq, etc.
+2. Prefer the structured tools for selections, coloring, representations, distances, alignment, sequence, and contacts. Use `run_pymol_commands` only for operations not covered by structured tools.
 3. Use `capture_viewport` to verify your work visually when doing complex styling.
 4. Use `render` when the user requests an image export.
 
@@ -892,8 +890,15 @@ if _HAS_QT:
                 )
                 return
 
-            current_text = self.text_model_combo.currentText().strip()
-            current_vision = self.vision_model_combo.currentText().strip()
+            current_text = (
+                self.text_model_combo.currentData()
+                or self.text_model_combo.currentText().strip()
+            )
+            current_vision = (
+                self.vision_model_combo.currentData()
+                if self.vision_model_combo.currentData() is not None
+                else self.vision_model_combo.currentText().strip()
+            )
 
             self.text_model_combo.clear()
             for model_id in models:
